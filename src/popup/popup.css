@@ -1,0 +1,82 @@
+/*
+ * Tablox popup.
+ *
+ * Reads the live tab count and renders count, state, and one short explanation.
+ * Deliberately read-only: the service worker is the sole writer of the toolbar.
+ *
+ * Visual direction: a small browser instrument, not a productivity coach.
+ * Calm, minimal, non-judgmental. The state's colour appears only as a thin
+ * rule and a small dot — never as a large block of colour.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --ink: #1c1f23;
+  --ink-muted: #6b7280;
+  --surface: #ffffff;
+  --rule: #e6e8eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8eaed;
+    --ink-muted: #9aa0a6;
+    --surface: #1c1f23;
+    --rule: #2f3439;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: 400 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tablox {
+  width: 208px;
+  padding: 18px 18px 16px;
+  border-top: 2px solid var(--state-color, var(--rule));
+}
+
+.count {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--state-color, var(--ink-muted));
+  flex: none;
+}
+
+.explanation {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  text-wrap: pretty;
+}

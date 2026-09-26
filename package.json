@@ -1,0 +1,17 @@
+{
+  "name": "tablox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A minimal browser signal showing how much browser context is currently open.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "verify:manifest": "node scripts/validate-manifest.mjs",
+    "verify:chrome": "node scripts/verify-in-chrome.mjs",
+    "icons": "node scripts/generate-icons.mjs"
+  }
+}
