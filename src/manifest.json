@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tablox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A minimal signal of how much browser context is currently open.",
   "minimum_chrome_version": "110",
   "permissions": [

@@ -46,11 +46,32 @@ test.after(uninstallChrome);
 /** Expected copy, spelled out here so a change to the state table is visible. */
 const EXPECTED_TOASTS = {
   focused: 'Clean slate. Enjoy it',
-  growing: 'The hoarding has begun',
-  crowded: 'Tab archaeology begins',
-  fragmented: 'Which one was I looking for again?',
-  overloaded: 'This is no longer a browser. It’s a database',
+  growing: 'A few tabs never hurt',
+  crowded: 'Things are starting to pile up',
+  fragmented: 'Tab archaeology begins',
+  overloaded: 'The browser has entered its archival era',
 };
+
+/**
+ * The same table, read downwards.
+ *
+ * Spelled out separately rather than derived, so that giving the two columns the
+ * same line by accident is visible here instead of quietly shipping.
+ */
+const EXPECTED_CLOSE_TOASTS = {
+  focused: 'Clean slate. Enjoy it',
+  growing: 'Making some room',
+  crowded: 'The pile is shrinking',
+  fragmented: 'The excavation continues',
+  overloaded: 'The archive is shrinking',
+};
+
+/** Both columns of the table, as `[state, direction, line]`. */
+const everyLine = () =>
+  STATES.flatMap((state) => [
+    [state, 'opening', state.toast],
+    [state, 'closing', state.toastClose],
+  ]);
 
 /**
  * Boot the service worker against a fake browser.
@@ -127,29 +148,50 @@ test('each state has exactly the specified line', () => {
   assert.deepEqual(actual, EXPECTED_TOASTS);
 });
 
+test('each state has exactly the specified line for the other direction', () => {
+  const actual = Object.fromEntries(STATES.map((state) => [state.id, state.toastClose]));
+  assert.deepEqual(actual, EXPECTED_CLOSE_TOASTS);
+});
+
+test('the two directions only share a line where there is nothing to say', () => {
+  // At the bottom of the table there is no pile to shrink and no room to make, so
+  // one line for both is the right copy rather than a missing second one. Every
+  // state above it has to speak differently: the whole point of the second column
+  // is that closing tabs and opening them are different events.
+  for (const state of STATES) {
+    const same = state.toast === state.toastClose;
+    assert.equal(
+      same,
+      state.id === 'focused',
+      `${state.id}: ${same ? 'shares' : 'differs'} between the two directions`,
+    );
+  }
+});
+
 test('the toast is the bare line, not a quoted one', () => {
   // The copy arrived wrapped in typographic quotes so it could sit safely in a
   // document. Those brackets are scaffolding and must not reach a page. An
   // apostrophe inside a word is not a bracket, so `It's` is left alone.
-  for (const state of STATES) {
-    const toast = state.toast;
-    assert.ok(!/^["“”']/.test(toast), `${state.id} toast opens with a quote`);
-    assert.ok(!/["“”']$/.test(toast), `${state.id} toast closes with a quote`);
-    assert.doesNotMatch(toast, /["“”]/, `${state.id} toast contains a double quote`);
+  for (const [state, direction, toast] of everyLine()) {
+    const label = `${state.id} ${direction} toast`;
+    assert.ok(!/^["“”']/.test(toast), `${label} opens with a quote`);
+    assert.ok(!/["“”']$/.test(toast), `${label} closes with a quote`);
+    assert.doesNotMatch(toast, /["“”]/, `${label} contains a double quote`);
 
     // The toast is a line put over someone's work, not a sentence in a document,
     // so it no longer ends in a full stop — it is the shortest thing that still
     // reads as a complete thought. A question keeps its question mark, because
     // that is part of the line rather than a closing full stop.
-    assert.doesNotMatch(toast, /\.$/, `${state.id} toast ends in a full stop`);
+    assert.doesNotMatch(toast, /\.$/, `${label} ends in a full stop`);
   }
 });
 
 test('the toast is one short line, so it cannot become a paragraph', () => {
-  for (const state of STATES) {
-    const words = state.toast.split(/\s+/).length;
-    assert.ok(words <= 12, `${state.id} toast is ${words} words`);
-    assert.ok(state.toast.length <= 64, `${state.id} toast is ${state.toast.length} characters`);
+  for (const [state, direction, toast] of everyLine()) {
+    const label = `${state.id} ${direction} toast`;
+    const words = toast.split(/\s+/).length;
+    assert.ok(words <= 12, `${label} is ${words} words`);
+    assert.ok(toast.length <= 64, `${label} is ${toast.length} characters`);
   }
 });
 
@@ -158,9 +200,9 @@ test('nothing Tablox writes is a verdict on the user', () => {
   // less. It shares the popup's vocabulary rather than inventing its own.
   const judgement = judgementPattern();
 
-  for (const state of STATES) {
+  for (const [state, direction, toast] of everyLine()) {
     assert.doesNotMatch(state.explanation, judgement, `${state.id} explanation`);
-    assert.doesNotMatch(state.toast, judgement, `${state.id} toast`);
+    assert.doesNotMatch(toast, judgement, `${state.id} ${direction} toast`);
   }
 });
 
@@ -215,7 +257,7 @@ test('3 → 4 tabs raises the Growing line', async () => {
   chrome.openTab();
   await settle();
 
-  assert.deepEqual(toastTexts(chrome), ['The hoarding has begun']);
+  assert.deepEqual(toastTexts(chrome), ['A few tabs never hurt']);
 });
 
 test('more tabs inside the same state raise nothing', async () => {
@@ -239,7 +281,7 @@ test('reaching 7 raises the Crowded line', async () => {
   chrome.openTab(); // 7
   await settle();
 
-  assert.deepEqual(toastTexts(chrome), ['Tab archaeology begins']);
+  assert.deepEqual(toastTexts(chrome), ['Things are starting to pile up']);
 });
 
 test('reaching 10 raises the Fragmented line', async () => {
@@ -250,7 +292,7 @@ test('reaching 10 raises the Fragmented line', async () => {
   chrome.openTab(); // 10
   await settle();
 
-  assert.deepEqual(toastTexts(chrome), ['Which one was I looking for again?']);
+  assert.deepEqual(toastTexts(chrome), ['Tab archaeology begins']);
 });
 
 test('reaching 13 raises the Overloaded line', async () => {
@@ -261,7 +303,7 @@ test('reaching 13 raises the Overloaded line', async () => {
   chrome.openTab(); // 13
   await settle();
 
-  assert.deepEqual(toastTexts(chrome), ['This is no longer a browser. It’s a database']);
+  assert.deepEqual(toastTexts(chrome), ['The browser has entered its archival era']);
 });
 
 test('a burst of opens raises one toast, for the state it settled on', async () => {
@@ -279,12 +321,16 @@ test('a burst of opens raises one toast, for the state it settled on', async () 
 
   assert.deepEqual(
     toastTexts(chrome),
-    ['Tab archaeology begins'],
+    ['Things are starting to pile up'],
     'a burst should produce one line, and it should be the final state’s',
   );
 });
 
-test('crossing down speaks as well', async () => {
+test('crossing down speaks, and speaks the line for closing', async () => {
+  // The bug this column exists for. Closing tabs is a different event from opening
+  // them, and the state cannot tell the two apart on its own: 12 tabs means the
+  // same thing whether they arrived or were left behind. Only the worker knows,
+  // from the sign of the delta, which one this was.
   const { chrome, module } = await boot({ windowTabCounts: [13] });
   await module.refresh();
   await settle();
@@ -292,7 +338,89 @@ test('crossing down speaks as well', async () => {
   chrome.closeTab((await chrome.tabs.query({}))[0].id); // 12
   await settle();
 
-  assert.deepEqual(toastTexts(chrome), ['Which one was I looking for again?']);
+  assert.deepEqual(toastTexts(chrome), ['The excavation continues']);
+});
+
+test('every threshold says the closing line when it is crossed downwards', async () => {
+  // One case per state that has a distinct line, so a state whose two lines were
+  // swapped cannot pass. The last case crosses three thresholds on the way down,
+  // and must still speak for the state it landed in.
+  const cases = [
+    { from: 4, close: 1, line: 'Clean slate. Enjoy it' }, // → 3
+    { from: 7, close: 1, line: 'Making some room' }, // → 6
+    { from: 10, close: 1, line: 'The pile is shrinking' }, // → 9
+    { from: 13, close: 1, line: 'The excavation continues' }, // → 12
+    { from: 20, close: 10, line: 'The excavation continues' }, // → 10
+  ];
+
+  for (const { from, close, line } of cases) {
+    const { chrome, module } = await boot({ windowTabCounts: [from] });
+    await module.refresh();
+    await settle();
+
+    for (let count = 0; count < close; count += 1) {
+      chrome.closeTab((await chrome.tabs.query({}))[0].id);
+    }
+    await settle();
+
+    assert.deepEqual(
+      toastTexts(chrome),
+      [line],
+      `${from} − ${close} should speak the line for closing`,
+    );
+  }
+});
+
+test('a fall is not described with a line about rising', async () => {
+  // The specific failure the second column exists to prevent: Crowded's opening
+  // line put on screen at the moment the user is tidying up. Correct copy in the
+  // wrong column still reads as a product that has lost track of what you did.
+  const { chrome, module } = await boot({ windowTabCounts: [7] });
+  await module.refresh();
+  await settle();
+
+  chrome.closeTab((await chrome.tabs.query({}))[0].id); // 6
+  await settle();
+
+  const spoken = toastTexts(chrome);
+  assert.deepEqual(spoken, ['Making some room']);
+  assert.notEqual(spoken[0], getState(7).toast, 'a fall was described as a rise');
+});
+
+test('a burst that both opens and closes speaks about the way it ended up', async () => {
+  // Four closed, one opened: the net movement is downwards, and that is the
+  // direction the line has to describe — not the last event to fire, which here
+  // is an open.
+  const { chrome, module } = await boot({ windowTabCounts: [8] });
+  await module.refresh();
+  await settle();
+
+  for (const tab of (await chrome.tabs.query({})).slice(0, 4)) {
+    chrome.closeTab(tab.id); // 8 → 4
+  }
+  chrome.openTab(); // 5
+  await settle();
+
+  assert.deepEqual(
+    toastTexts(chrome),
+    ['Making some room'],
+    'the direction should be the net one, not the last event’s',
+  );
+});
+
+test('a rise and a fall inside one state stay quiet in both directions', async () => {
+  // The direction must not be a way to say something about a change that crossed
+  // nothing: 4 → 6 → 5 is all Growing.
+  const { chrome, module } = await boot({ windowTabCounts: [4] });
+  await module.refresh();
+  await settle();
+
+  chrome.openTab(); // 5
+  chrome.openTab(); // 6
+  chrome.closeTab((await chrome.tabs.query({}))[0].id); // 5
+  await settle();
+
+  assert.deepEqual(toastTexts(chrome), [], 'a same-state change must stay quiet');
 });
 
 test('only foreground tabs are addressed, in every window', async () => {
@@ -356,7 +484,7 @@ test('a tab that is still loading gets the toast once it is listening', async ()
   assert.ok(delivered, 'the worker stopped trying before the tab was ready');
   assert.deepEqual(
     toastTexts(chrome),
-    ['The hoarding has begun'],
+    ['A few tabs never hurt'],
     'the toast was dropped on a page that had not finished loading',
   );
 });
@@ -411,7 +539,7 @@ test('a worker woken from eviction still announces the crossing', async () => {
   const got = await waitFor(() => toastTexts(chrome).length > 0);
 
   assert.ok(got, 'a worker with no memory of the previous state stayed silent');
-  assert.deepEqual(toastTexts(chrome), ['The hoarding has begun']);
+  assert.deepEqual(toastTexts(chrome), ['A few tabs never hurt']);
 });
 
 test('a worker that has seen no events at all stays silent', async () => {
@@ -446,7 +574,7 @@ test('a tab that announces itself late still gets the crossing', async () => {
   const got = await waitFor(() => toastTexts(chrome).length > 0);
 
   assert.ok(got, 'the tab that announced itself was never given the toast');
-  assert.deepEqual(toastTexts(chrome), ['The hoarding has begun']);
+  assert.deepEqual(toastTexts(chrome), ['A few tabs never hurt']);
 });
 
 test('a tab readied long after the crossing still gets it', async () => {
@@ -476,7 +604,7 @@ test('a tab readied long after the crossing still gets it', async () => {
     const got = await waitFor(() => toastTexts(chrome).length > 0);
 
     assert.ok(got, 'a tab that settled 15s after crossing was never given the toast');
-    assert.deepEqual(toastTexts(chrome), ['The hoarding has begun']);
+    assert.deepEqual(toastTexts(chrome), ['A few tabs never hurt']);
   } finally {
     Date.now = real;
   }
@@ -536,7 +664,7 @@ test('a tab opened just after a crossing is not given it', async () => {
   await settle();
 
   assert.deepEqual(
-    toastTexts(chrome).filter((text) => text === 'The hoarding has begun'),
+    toastTexts(chrome).filter((text) => text === 'A few tabs never hurt'),
     [],
     'a bystander tab collected a crossing that was not its own',
   );
@@ -545,7 +673,7 @@ test('a tab opened just after a crossing is not given it', async () => {
   chrome.tabBecomesReady(crossing.id);
   const got = await waitFor(() => toastTexts(chrome).length > 0);
   assert.ok(got, 'the addressed tab was skipped');
-  assert.deepEqual(toastTexts(chrome), ['The hoarding has begun']);
+  assert.deepEqual(toastTexts(chrome), ['A few tabs never hurt']);
 });
 
 test('in a burst, only the tab in front is given the crossing', async () => {
@@ -571,7 +699,7 @@ test('in a burst, only the tab in front is given the crossing', async () => {
   const got = await waitFor(() => toastTexts(chrome).length > 0);
 
   assert.ok(got, 'the foreground tab was never given the toast');
-  assert.deepEqual(toastTexts(chrome), ['The hoarding has begun']);
+  assert.deepEqual(toastTexts(chrome), ['A few tabs never hurt']);
 });
 
 test('a page that answers the announcement is not toasted again by the retry', async () => {
@@ -593,7 +721,7 @@ test('a page that answers the announcement is not toasted again by the retry', a
 
   assert.deepEqual(
     toastTexts(chrome),
-    ['The hoarding has begun'],
+    ['A few tabs never hurt'],
     'the toast was raised more than once on one page',
   );
 });

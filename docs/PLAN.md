@@ -127,13 +127,23 @@ The only genuinely unknowable case is having seen no tab event at all, which is 
 startup, and which stays silent.
 
 **The decision is debounced, not rate-limited.** A cooldown alone announces the state the user
-passed *through* — `3 → 7` in quick succession would say "The hoarding has begun" and leave
+passed *through* — `3 → 7` in quick succession would say "A few tabs never hurt" and leave
 them in Crowded, unmentioned. Waiting 400ms for the events to stop and then deciding once
 against the settled state gets `3 → 4 → 5 → 6 → 7` down to one line, and the right one. The
 4-second cooldown stays underneath for a genuinely repeated crossing. It is not the same length as the
 window in which an unready tab may still collect a crossing, because those answer different questions:
 the cooldown governs how often a line may be said, the miss window how long an owed line can still
 arrive.
+
+**The line depends on the direction, and the direction is already known.** Adding and removing a tab
+crosses the same thresholds, so the first version had one line per state and used it for both. That
+is wrong in a way the threshold test cannot see: a state is a range, and a range does not record
+whether the count got there by opening or by closing, so someone tidying up was told their pile was
+growing. Each state now carries a second line, chosen by the sign of the same delta that recovers
+the previous state — which means the direction costs no extra memory, and a burst that both opens and
+closes speaks for the net movement rather than for whichever event fired last. `Focused` is the one
+state where the two lines coincide, because at one to three tabs there is nothing to pile up and no
+room to make.
 
 **The page that crossed is the page that is still loading.** The tab the user just opened is the
 one that crosses the threshold, and it has no content script yet when the message goes out, so

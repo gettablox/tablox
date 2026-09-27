@@ -122,6 +122,8 @@ test('getState returns the full contract for every state', () => {
       'minTabs',
       'maxTabs',
       'explanation',
+      'toast',
+      'toastClose',
       'tabCount',
     ]) {
       assert.ok(key in state, `${count} tabs: missing "${key}"`);

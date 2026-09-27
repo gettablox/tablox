@@ -59,34 +59,53 @@ const ICON_TARGET_LUMINANCE = 0.215;
  *   minTabs: number,
  *   maxTabs: number|null,
  *   explanation: string,
- *   toast: string
+ *   toast: string,
+ *   toastClose: string
  * }>>}
  *
- * `toast` is the one-line quip shown in the in-page toast, and unlike
- * `explanation` it is allowed to be a little wry — the popup is where the
- * product states its position carefully, and the toast is allowed to be brief.
- * It is the only place the extension puts words over someone's work, so it
+ * `toast` and `toastClose` are the one-line quips shown in the in-page toast, and
+ * unlike `explanation` they are allowed to be a little wry — the popup is where
+ * the product states its position carefully, and the toast is allowed to be
+ * brief. It is the only place the extension puts words over someone's work, so it
  * carries the state's colour and nothing else: no controls, no markup from us,
  * and no text the state table does not already define.
+ *
+ * There are two lines per state because the same threshold is crossed in two
+ * directions, and they are different sentences about different events. Someone who
+ * has just opened a seventh tab and someone who has just closed three are in the
+ * same state and have not done the same thing; "Things are starting to pile up"
+ * said to the second of them is simply wrong, not merely less apt. The state
+ * knows the range and the colour, and only the worker knows which way the count
+ * moved, so the choice between the two is made there.
+ *
+ * The lowest state is the one place the two lines coincide, and that is a
+ * property of its copy rather than a fallback the code applies: at 1–3 tabs there
+ * is nothing to make room for and nothing to shrink, so there is only one thing
+ * worth saying. A state with a real pile to talk about needs two.
  */
 export const STATES = Object.freeze(
   [
     ['focused', 'Focused', '#19DF96', '1–3', 1, 3,
       'Your browser context is light, with little to keep track of.',
+      'Clean slate. Enjoy it',
       'Clean slate. Enjoy it'],
     ['growing', 'Growing', '#639CFF', '4–6', 4, 6,
       'More information is building up in your browser context.',
-      'The hoarding has begun'],
+      'A few tabs never hurt',
+      'Making some room'],
     ['crowded', 'Crowded', '#FDCF06', '7–9', 7, 9,
       'More information is making it harder to quickly find what you need.',
-      'Tab archaeology begins'],
+      'Things are starting to pile up',
+      'The pile is shrinking'],
     ['fragmented', 'Fragmented', '#FF6F00', '10–12', 10, 12,
       'Different pages and tasks are competing for your attention.',
-      'Which one was I looking for again?'],
+      'Tab archaeology begins',
+      'The excavation continues'],
     ['overloaded', 'Overloaded', '#FF343A', '13+', 13, null,
       'There is a lot to organize, find, and return to.',
-      'This is no longer a browser. It’s a database'],
-  ].map(([id, label, color, range, minTabs, maxTabs, explanation, toast]) =>
+      'The browser has entered its archival era',
+      'The archive is shrinking'],
+  ].map(([id, label, color, range, minTabs, maxTabs, explanation, toast, toastClose]) =>
     Object.freeze({
       id,
       label,
@@ -98,6 +117,7 @@ export const STATES = Object.freeze(
       maxTabs,
       explanation,
       toast,
+      toastClose,
     }),
   ),
 );
@@ -354,6 +374,8 @@ function hslToRgb(h, s, l) {
  *   minTabs: number,
  *   maxTabs: number|null,
  *   explanation: string,
+ *   toast: string,
+ *   toastClose: string,
  *   tabCount: number
  * }}
  */
@@ -372,6 +394,7 @@ export function getState(tabCount) {
     maxTabs: state.maxTabs,
     explanation: state.explanation,
     toast: state.toast,
+    toastClose: state.toastClose,
     tabCount: count,
   });
 }
@@ -382,7 +405,7 @@ export function getState(tabCount) {
  * @param {number} count
  * @returns {Readonly<{id: string, label: string, color: string, iconColor: string,
  *   badgeText: string, range: string, minTabs: number, maxTabs: number|null,
- *   explanation: string, toast: string}>}
+ *   explanation: string, toast: string, toastClose: string}>}
  */
 function findState(count) {
   for (const state of STATES) {

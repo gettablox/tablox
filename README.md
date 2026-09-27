@@ -7,13 +7,13 @@ the current state, with the exact count on Chrome's own badge. When the count
 crosses into a new state, it also says so — once, briefly, on the page you are
 looking at.
 
-|  Tabs | State      | Icon      | Badge     | Toast                                        |
-| ----: | ---------- | --------- | --------- | -------------------------------------------- |
-|   1–3 | Focused    | `#109162` | `#19DF96` | Clean slate. Enjoy it                        |
-|   4–6 | Growing    | `#2D79FF` | `#639CFF` | The hoarding has begun                       |
-|   7–9 | Crowded    | `#997D01` | `#FDCF06` | Tab archaeology begins                       |
-| 10–12 | Fragmented | `#D25C00` | `#FF6F00` | Which one was I looking for again?           |
-|   13+ | Overloaded | `#FF0911` | `#FF343A` | This is no longer a browser. It’s a database |
+|  Tabs | State      | Icon      | Badge     | Toast on opening                         | Toast on closing         |
+| ----: | ---------- | --------- | --------- | ---------------------------------------- | ------------------------ |
+|   1–3 | Focused    | `#109162` | `#19DF96` | Clean slate. Enjoy it                    | Clean slate. Enjoy it    |
+|   4–6 | Growing    | `#2D79FF` | `#639CFF` | A few tabs never hurt                    | Making some room         |
+|   7–9 | Crowded    | `#997D01` | `#FDCF06` | Things are starting to pile up           | The pile is shrinking    |
+| 10–12 | Fragmented | `#D25C00` | `#FF6F00` | Tab archaeology begins                   | The excavation continues |
+|   13+ | Overloaded | `#FF0911` | `#FF343A` | The browser has entered its archival era | The archive is shrinking |
 
 The badge is the exact count. Click the icon for one short explanation.
 

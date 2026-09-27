@@ -952,10 +952,37 @@ try {
     ]);
   }
 
-  failures.push(...toastFailures);
-
   // The worker was let go of, to be evicted. It is needed again now.
   await attachWorker();
+
+  // --- 3. the same threshold, crossed downwards ---------------------------
+
+  // A state is a range, and a range does not record whether the count got there
+  // by opening or by closing — which makes this the one property a real browser
+  // can prove and a lookup table cannot. The worker has to learn the direction
+  // from the event and then pick the right line out of two, and the unit tests
+  // are asserting against the same state table the implementation reads.
+  await sleep(TOAST_MIN_INTERVAL_MS + 400); // let the last crossing's cooldown lapse
+
+  // Ten tabs down to nine, by closing one of the scratch tabs. The page that did
+  // the last crossing is still in front of its own window, so it is where a
+  // toast has to arrive — and its own toast from that crossing is long gone, so
+  // anything on screen now is this one.
+  await cdp.send('Target.closeTarget', { targetId: toastTargets[0] });
+  const falling = await waitForToast(crossed.pageSession, 6000);
+  const fallingState = getState(9);
+  checkToast(`9 tabs · Crowded · ${JSON.stringify(fallingState.toastClose)}`, [
+    ...(falling ? [] : ['no toast after closing a tab across a threshold']),
+    ...(falling && falling.text !== fallingState.toastClose
+      ? [
+          `text ${JSON.stringify(falling.text)} should be ` +
+            `${JSON.stringify(fallingState.toastClose)}, which is the line for closing; ` +
+            `${JSON.stringify(fallingState.toast)} is the line for opening`,
+        ]
+      : []),
+  ]);
+
+  failures.push(...toastFailures);
 
   // Put the tab count back where the toolbar sweep expects to find it.
   for (const targetId of toastTargets) {

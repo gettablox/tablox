@@ -211,21 +211,37 @@ to read behind the toast.
 ### It stays quiet until you cross a threshold
 
 Open tabs one at a time up to three. **Nothing should appear.** Then open the
-fourth: *The hoarding has begun* should arrive at the top of the page, in the
+fourth: *A few tabs never hurt* should arrive at the top of the page, in the
 blue of the Growing badge, and leave about three seconds later without you having
 touched anything.
 
 ### It does not repeat itself
 
 With four tabs open, open a fifth and a sixth. Nothing. Open a seventh:
-*Tab archaeology begins*. This is the single most important property of the
-feature — if it says something on every tab, it will be turned off within a day.
+*Things are starting to pile up*. This is the single most important property of
+the feature — if it says something on every tab, it will be turned off within a day.
 
 ### It handles a burst
 
 From three tabs, open four more quickly, in under a second. You should get **one**
-toast, and it should be *Tab archaeology begins* — the state you ended up in —
-not *The hoarding has begun*, which you passed through on the way.
+toast, and it should be *Things are starting to pile up* — the state you ended up
+in — not *A few tabs never hurt*, which you passed through on the way.
+
+### It says something different when you close tabs
+
+This is the one that takes a second read to check, so check it deliberately. From
+ten tabs, close one: *The pile is shrinking* — not *Things are starting to pile
+up*. Then from thirteen, close one: *The excavation continues*, not *Tab
+archaeology begins*.
+
+The point is not the wording but the direction. The badge colour is the same
+either way, because the state is the same; the line should not be. If closing tabs
+gives you the rising line, the tool is congratulating you on the opposite of what
+you just did, and that is worse than saying nothing at all.
+
+From four tabs, close one: *Clean slate. Enjoy it* — the lowest state has one line
+for both directions, because at one to three tabs there is nothing to make room
+for. That is the only state where the two agree.
 
 ### It says nothing you have to dismiss
 

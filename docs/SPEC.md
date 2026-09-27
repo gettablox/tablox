@@ -1,10 +1,10 @@
 # Tablox — Specification
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Status:** Approved for implementation
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-27
 
-This document is the source of truth for Tablox V0.1. Code must match this document. If they
+This document is the source of truth for Tablox 0.2.0. Code must match this document. If they
 disagree, the document is wrong and gets updated first.
 
 ---
@@ -46,17 +46,22 @@ Explicitly out of scope. Not deferred features — excluded by design:
 Tablox counts all currently open browser tabs across all windows, then maps that count to exactly
 one of five states.
 
-|  Tabs | State      | Badge colour | Icon colour | Toast                                        |
-| ----: | ---------- | ------------ | ----------- | -------------------------------------------- |
-|   1–3 | Focused    | `#19DF96`    | `#109162`   | Clean slate. Enjoy it                        |
-|   4–6 | Growing    | `#639CFF`    | `#2D79FF`   | The hoarding has begun                       |
-|   7–9 | Crowded    | `#FDCF06`    | `#997D01`   | Tab archaeology begins                       |
-| 10–12 | Fragmented | `#FF6F00`    | `#D25C00`   | Which one was I looking for again?           |
-|   13+ | Overloaded | `#FF343A`    | `#FF0911`   | This is no longer a browser. It’s a database |
+|  Tabs | State      | Badge colour | Icon colour | Toast on opening                         | Toast on closing         |
+| ----: | ---------- | ------------ | ----------- | ---------------------------------------- | ------------------------ |
+|   1–3 | Focused    | `#19DF96`    | `#109162`   | Clean slate. Enjoy it                    | Clean slate. Enjoy it    |
+|   4–6 | Growing    | `#639CFF`    | `#2D79FF`   | A few tabs never hurt                    | Making some room         |
+|   7–9 | Crowded    | `#FDCF06`    | `#997D01`   | Things are starting to pile up           | The pile is shrinking    |
+| 10–12 | Fragmented | `#FF6F00`    | `#D25C00`   | Tab archaeology begins                   | The excavation continues |
+|   13+ | Overloaded | `#FF343A`    | `#FF0911`   | The browser has entered its archival era | The archive is shrinking |
 
 The copy is the same in the toast and the popup, and lives in this one table.
-A state is a colour, a range, an explanation and a toast — never two of those
-things in two places.
+A state is a colour, a range, an explanation and two toasts — never two of
+those things in two places.
+
+The two toast columns are the same threshold read in two directions, and they are
+not interchangeable. A state knows the range and the colour; only the worker knows
+whether the count arrived there or was walked back down, so the choice of line is
+made there. See [§6](#6-threshold-toast).
 
 ### Required boundary behaviour
 
@@ -112,6 +117,8 @@ getState(tabCount) -> {
   minTabs:     number,       // inclusive lower bound
   maxTabs:     number|null,  // inclusive upper bound, null = open-ended
   explanation: string,       // one or two sentences
+  toast:       string,       // the line for a count that rose into this state
+  toastClose:  string,       // the line for a count that fell into this state
   tabCount:    number        // echoed back for convenience
 }
 ```
@@ -281,7 +288,7 @@ the only thing Tablox says without being asked, so the bar for saying it is high
 | Browser starts, extension installs, worker's own first breath | **No** | No tab event has happened yet, so there is no "before" to compare against. |
 | Worker revived by a tab event after being evicted | **Yes** | The event says how far it moved the count, so the state it came from is known without remembering anything. See [Waking up](#waking-up). |
 | Count crosses a threshold, upward | Yes | The state genuinely changed. |
-| Count crosses a threshold, downward | Yes | So does a fall. The brief prefers upward, and this is the same rule applied in both directions. |
+| Count crosses a threshold, downward | Yes | So does a fall, and it gets the state's `toastClose` line — see below. |
 | Count changes within a state | **No** | `4 → 5` is not news. |
 | A crossing already inside the cooldown | **No** | See below. |
 | A burst of events | **Once** | See debouncing. |
@@ -290,17 +297,36 @@ Downward crossings are not softened. A single rule — "the state you settled on
 not the state you were in" — is easier to reason about than one with exceptions,
 and the user cannot tell a rising count from a falling one at a glance anyway.
 
+**But the two directions do not share a line.** A state describes a range, and a
+range says nothing about how the count came to be there: twelve tabs is twelve tabs
+whether they were opened or survived. "Things are starting to pile up" said to
+someone who has just closed three is not a softer version of the right thing, it is
+the wrong thing — and it is the wrong thing at the moment the user is tidying up,
+which is the moment least in need of being told their pile is growing. So every
+state carries a second line, chosen by the sign of the delta, and `Focused` is the
+one state where the two coincide: at one to three tabs there is no pile to shrink
+and no room to make.
+
+The choice is made in the worker rather than in `getState`, because the state is
+also used by the popup and the toolbar, neither of which knows or cares which way
+the count moved, and putting the question in `getState` would force both to invent
+an answer.
+
 ### Debouncing, and why not a cooldown alone
 
 Opening five tabs fires five events in a few hundred milliseconds and can cross
 two thresholds. Deciding on each event raises a toast per crossing; deciding
 against a fixed cooldown from the first one announces the state the user passed
 *through* rather than the one they are in — `3 → 7` in quick succession would say
-"The hoarding has begun" and leave them in Crowded, unmentioned.
+"A few tabs never hurt" and leave them in Crowded, unmentioned.
 
 So the decision waits `TOAST_DEBOUNCE_MS` (400ms) for the events to stop, and is
 made once against the settled state. `3 → 4 → 5 → 6 → 7` produces exactly one
 line: Crowded's.
+
+A burst that both opens and closes has one net direction, and that is the
+direction the line describes — the last event to fire is an implementation detail,
+and `8 → 4 → 5` crossed downwards on net even though its final event was an open.
 
 A 4-second `TOAST_MIN_INTERVAL_MS` cooldown sits underneath as a secondary guard
 against a genuinely repeated crossing — hovering either side of a threshold, or
@@ -330,6 +356,11 @@ reports, and the state the count came from is known:
 ```
 previous = getState(max(1, tabCount - pendingDelta))
 ```
+
+The same sum is also the direction, and needs no memory for that either: a
+negative delta is a fall, and picks the state's `toastClose` line. A delta of zero
+— a tab moving between windows — crossed no threshold, so it is never the
+direction of a toast.
 
 Nothing is remembered, so nothing is lost when the worker is stopped, and no
 permission is needed to fix it. The one case that genuinely has no "before" —
@@ -370,7 +401,7 @@ the New Tab page, which takes no content script and therefore never announces
 itself. The offer is not waiting on the network — it is waiting on a person to
 type or paste a URL, choose a bookmark, or read a page before moving on, and
 that routinely takes longer than four seconds. Measured in Brave, opening a
-fourth tab and then navigating it lost `"The hoarding has begun"` entirely at
+fourth tab and then navigating it lost the toast for that crossing entirely at
 four seconds, and delivered it at thirty.
 
 Thirty seconds is also how long Chrome waits before stopping an idle MV3 worker,
@@ -667,11 +698,12 @@ drag-a-tab-between-windows.
 Covered in three layers, because the toast is the only part of Tablox that acts
 on its own and the failure mode is talking when it should not.
 
-**The copy** is asserted as exact strings, with the specified punctuation, and
-checked for the properties that must hold whatever the wording: no wrapping
-quotation marks, one sentence, no more than twelve words, and no judgement
-vocabulary. The judgement list is shared with the popup's through
-`test/helpers/copy.js`, so the two cannot drift apart.
+**The copy** is asserted as exact strings — both columns, spelled out separately
+so that giving a state the same line twice is visible in the test rather than
+shipped — with the specified punctuation, and checked for the properties that must
+hold whatever the wording: no wrapping quotation marks, one sentence, no more than
+twelve words, and no judgement vocabulary. The judgement list is shared with the
+popup's through `test/helpers/copy.js`, so the two cannot drift apart.
 
 **The transition policy** is tested as a pure function, which is the reason it was
 written as one:
@@ -688,10 +720,22 @@ written as one:
 
 **The behaviour against a fake browser** covers the scenarios the brief names:
 3 → 4 speaks; 4 → 5 and 5 → 6 do not; 7 speaks; 10 speaks; 13 speaks. Plus the
-burst (`3 → 4 → 5 → 6 → 7` yields exactly one line, and it is Crowded's), a
-downward crossing, delivery to the foreground tab of every window and no
-background tab, the payload carrying the state's own two colours, and a tab that
-refuses content scripts being skipped without taking the refresh down.
+burst (`3 → 4 → 5 → 6 → 7` yields exactly one line, and it is Crowded's), delivery
+to the foreground tab of every window and no background tab, the payload carrying
+the state's own two colours, and a tab that refuses content scripts being skipped
+without taking the refresh down.
+
+**The direction** is covered separately, because it is the one part of the toast
+that a state cannot supply on its own and the easiest thing to get wrong in a way
+that still looks right:
+
+| Case | Expectation |
+| ---- | ----------- |
+| `4 → 3`, `7 → 6`, `10 → 9`, `13 → 12` | each speaks its own state's `toastClose` |
+| `20 → 10` — a fall across three thresholds | speaks the landed state's closing line, not one passed through |
+| `7 → 6` | never the rising line of the state just left |
+| `8 → 4 → 5` — four closed, one opened | speaks the closing line; the net direction wins over the last event |
+| `4 → 5 → 6 → 5` | silent in both directions — a same-state change is not news either way |
 
 Five of them exist because the feature was broken in ordinary use and the fix had
 to be pinned down:
@@ -750,7 +794,7 @@ itself and the badge ships unreadable without the harness noticing.
 **The toast** is checked in the same run, against a real page served from
 `127.0.0.1` — content scripts are matched by URL, so `about:blank` cannot host
 one. A page in its own window is therefore the foreground tab there, which is the
-only way a toast is ever addressed. Ten checks:
+only way a toast is ever addressed. Eleven checks:
 
 1. a page opened at 2 tabs, still Focused, shows nothing
 2. at 3 tabs, still Focused, still nothing
@@ -771,6 +815,13 @@ only way a toast is ever addressed. Ten checks:
 9. the service worker can be stopped, and did stop
 10. a worker woken by that eviction still announces the crossing — the case the
     whole feature turned on
+11. a tab *closed* across a threshold speaks the state's closing line, checked
+    against the other line by name so a failure says which column was read
+
+Check 11 is the only one whose copy cannot be proven by the lookup table alone,
+because the unit suite asserts against the same table the implementation reads.
+Closing a tab crosses a threshold exactly as opening one does, so the direction
+has to come from the event, and only a real browser can be asked to close one.
 
 Check 9 detaches the harness's own debugger session first, because a worker with
 a debugger attached is not eligible to be stopped: holding on is the one thing
@@ -813,6 +864,8 @@ original restored:
 | shape shifted right 1px (horizontal off-centre)  | unit      |
 | badge text given a trailing space                | unit      |
 | toast copy reworded                             | unit      |
+| a closing line swapped for the opening one       | unit      |
+| the direction ignored, one line per state        | unit      |
 | debounce removed, so every event decides         | unit      |
 | debounce timer made non-cancellable              | unit      |
 | debounce callback re-arms itself                 | unit      |

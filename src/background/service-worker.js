@@ -49,6 +49,10 @@ let lastToastAt = null;
  * and the state before the burst is known — with nothing remembered, which is
  * what makes it survive the worker being evicted.
  *
+ * Its sign is also the only record of which way the count moved, which is what
+ * chooses between the state's two lines. A sign of zero crossed no threshold, so
+ * it is never the direction of a toast.
+ *
  * @type {number|null}
  */
 let pendingDelta = null;
@@ -91,17 +95,17 @@ let missedCrossing = null;
  * first to arrive closes the other, or the page the user is looking at shows the
  * line twice.
  *
- * @param {{state: object, aimed: Set<number>, landed: Set<number>}} crossing
+ * @param {{state: object, text: string, aimed: Set<number>, landed: Set<number>}} crossing
  * @param {number} tabId
  * @returns {Promise<boolean>} whether the tab now has the toast
  */
 async function deliverCrossing(crossing, tabId) {
-  const { state, aimed, landed } = crossing;
+  const { state, text, aimed, landed } = crossing;
   if (landed.has(tabId)) return true;
   if (!aimed.has(tabId)) return false;
   const delivered = await deliverToTab(
     tabId,
-    { type: 'tablox:toast', text: state.toast, color: state.color, textColor: state.badgeText },
+    { type: 'tablox:toast', text, color: state.color, textColor: state.badgeText },
     () => landed.has(tabId),
   );
   if (delivered) landed.add(tabId);
@@ -236,6 +240,13 @@ function scheduleToastDecision() {
  * happened, and leaving it unspent would fold it into the next decision and
  * report a change that never occurred.
  *
+ * The line itself is chosen here, and not in delivery, because the state cannot
+ * say it alone: the same range reads differently depending on which way the count
+ * came through it. The sign of the delta is the only statement about direction the
+ * worker has — the state it came from is a range, not a movement — and a burst
+ * that both opened and closed tabs has one net direction, which is the one the
+ * user actually ended up having moved in.
+ *
  * @returns {void}
  */
 function decideToast() {
@@ -246,16 +257,21 @@ function decideToast() {
   // no way to know what the count was before. Recording a baseline and saying
   // nothing is the only safe reading — this is the install, the browser starting
   // up, and the worker's own first breath.
+  const delta = pendingDelta;
   const previousId =
-    pendingDelta === null
-      ? null
-      : getState(Math.max(1, state.tabCount - pendingDelta)).id;
+    delta === null ? null : getState(Math.max(1, state.tabCount - delta)).id;
   pendingDelta = null;
 
   if (shouldShowToast(previousId, state.id, { lastShownAt: lastToastAt, now: Date.now() })) {
     // Held so a tab that was not ready can still collect it. The tab that just
     // crossed is, nine times in ten, the tab that is still loading.
-    const crossing = { state, at: Date.now(), aimed: new Set(), landed: new Set() };
+    const crossing = {
+      state,
+      text: delta < 0 ? state.toastClose : state.toast,
+      at: Date.now(),
+      aimed: new Set(),
+      landed: new Set(),
+    };
     missedCrossing = crossing;
 
     // Not awaited: the toolbar is already correct, and holding its paint on a
@@ -311,7 +327,7 @@ function offerMissedCrossing(sender) {
  * content scripts. Every one of those refusals is swallowed, because a tab
  * that cannot show a toast is not a failure of anything.
  *
- * @param {{state: ReturnType<typeof getState>, aimed: Set<number>, landed: Set<number>}} crossing
+ * @param {{state: ReturnType<typeof getState>, text: string, aimed: Set<number>, landed: Set<number>}} crossing
  * @returns {Promise<number>} how many tabs accepted the toast
  */
 export async function pushToast(crossing) {
